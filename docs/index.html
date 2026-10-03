@@ -1,0 +1,980 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>とうげこう</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="とうげこう">
+<meta name="theme-color" content="#fff3cf">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<style>
+:root {
+  --bg: #fff3cf;
+  --ink: #2b2b2b;
+  --ink-soft: #6b6b6b;
+  --accent: #2f7d6d;
+  --go: #2fa84f;
+  --out: #ef8a1b;
+  --danger: #d64545;
+  --before-bg: #e4e6ea;
+  --before-ink: #5a5f69;
+  --present-bg: #b9efc6;
+  --present-edge: #2fa84f;
+  --done-bg: #ced8ea;
+  --done-edge: #8798b8;
+  --k: 1; /* 人数が多いときに JS が小さくする（タイルの縮小係数） */
+  --font: -apple-system, "Hiragino Maru Gothic ProN", "Hiragino Sans", "Hiragino Kaku Gothic ProN", sans-serif;
+}
+* {
+  box-sizing: border-box;
+  -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+input, textarea { -webkit-user-select: text; user-select: text; }
+html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: var(--bg); color: var(--ink); font-family: var(--font); }
+body { position: fixed; inset: 0; width: 100%; }
+button { font-family: inherit; cursor: pointer; }
+[hidden] { display: none !important; }
+
+#app {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+.screen { display: none; flex: 1; min-height: 0; flex-direction: column; position: relative; }
+.screen.active { display: flex; }
+
+/* ───── 画面1：名前一覧 ───── */
+.home-head { display: flex; align-items: baseline; gap: 24px; padding: 14px 24px 6px; }
+.home-date { font-size: clamp(26px, 4vw, 40px); font-weight: 800; }
+.home-time { font-size: clamp(26px, 4vw, 40px); font-weight: 800; font-variant-numeric: tabular-nums; color: var(--accent); }
+.home-group { font-size: 18px; color: var(--ink-soft); font-weight: 700; }
+.hotspot { position: absolute; top: 0; right: 0; width: 96px; height: 96px; z-index: 5; opacity: .0; }
+.hotspot::after { content: ""; position: absolute; top: 14px; right: 14px; width: 10px; height: 10px; border-radius: 50%; background: var(--ink); opacity: .12; }
+.groups { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; padding: 4px 20px 44px; }
+.grade { margin-bottom: 8px; }
+.grade-label { display: inline-block; margin: 6px 0 8px 4px; padding: 2px 14px; border-radius: 999px; background: rgba(0,0,0,.08); font-weight: 800; font-size: 18px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(clamp(130px, 17vw, 190px) * var(--k)), 1fr)); gap: calc(12px * var(--k)); }
+.tile {
+  appearance: none; border: 4px solid transparent; border-radius: 22px; padding: 8px 6px;
+  min-height: calc(clamp(112px, 17vh, 170px) * var(--k));
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  font-size: max(16px, calc(clamp(22px, min(3.2vh, 2.7vw), 32px) * var(--k))); font-weight: 800; line-height: 1.25; text-align: center; color: var(--ink);
+  word-break: keep-all; overflow-wrap: anywhere;
+}
+.tile:active { transform: scale(.97); }
+.tile ruby { ruby-position: over; }
+.tile rt { font-size: .46em; font-weight: 700; }
+.tile.s-before { background: var(--before-bg); color: var(--before-ink); font-size: max(17px, calc(clamp(24px, min(3.6vh, 3vw), 36px) * var(--k))); }
+.tile.s-present { background: var(--present-bg); border-color: var(--present-edge); }
+.tile.s-done { background: var(--done-bg); border-color: var(--done-edge); color: #4a5875; }
+.avatar { width: calc(clamp(52px, min(10vh, 11vw), 92px) * var(--k)); height: calc(clamp(52px, min(10vh, 11vw), 92px) * var(--k)); border-radius: 50%; overflow: hidden; background: #fff; display: grid; place-items: center; font-size: calc(clamp(26px, min(5vh, 5.5vw), 46px) * var(--k)); font-weight: 800; color: var(--accent); flex: none; }
+.avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.s-done .avatar { opacity: .45; }
+.tile-label { font-size: max(12px, calc(clamp(14px, min(2.1vh, 2vw), 19px) * var(--k))); font-weight: 800; }
+.s-present .tile-label { color: #1d7a37; }
+.s-done .tile-label { color: #4a5875; }
+.empty-note { padding: 48px 24px; font-size: 24px; font-weight: 700; color: var(--ink-soft); text-align: center; line-height: 1.7; }
+.home-foot { position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 16px calc(8px + env(safe-area-inset-bottom)); display: flex; gap: 10px; pointer-events: none; }
+.chip { pointer-events: none; font-size: 15px; font-weight: 800; padding: 4px 12px; border-radius: 999px; background: rgba(0,0,0,.55); color: #fff; }
+.chip.warn { background: var(--danger); }
+.ver { margin-left: auto; font-size: 12px; color: var(--ink-soft); opacity: .6; align-self: center; }
+
+/* ───── 画面2：撮影 ───── */
+#screen-capture { background: #15191c; color: #fff; }
+.cap-top { display: flex; align-items: center; gap: 16px; padding: 12px 16px 8px; }
+.btn-back { appearance: none; border: 0; border-radius: 20px; background: #3a4147; color: #fff; font-size: clamp(24px, 3.6vw, 34px); font-weight: 800; padding: 16px 28px; }
+.cap-name { flex: 1; text-align: center; font-size: clamp(34px, 6vw, 60px); font-weight: 800; line-height: 1.2; padding-right: 150px; }
+.cap-name rt { font-size: .38em; }
+.cap-body { flex: 1; min-height: 0; display: flex; gap: 16px; padding: 4px 16px 16px; }
+.cap-stage { flex: 1; position: relative; background: #000; border-radius: 28px; overflow: hidden; }
+.cap-stage video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; transform: scaleX(-1); background: #000; }
+.cap-msg { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; font-size: clamp(26px, 4vw, 40px); font-weight: 800; line-height: 1.6; }
+.cap-msg small { display: block; font-size: 18px; font-weight: 600; opacity: .75; margin-top: 8px; }
+.cap-side { width: 34%; display: flex; align-items: center; justify-content: center; }
+.btn-shoot { appearance: none; border: 0; width: 100%; height: 100%; max-height: 300px; border-radius: 36px; color: #fff; font-size: clamp(44px, 7vw, 76px); font-weight: 800; letter-spacing: .08em; box-shadow: 0 8px 0 rgba(0,0,0,.28); }
+.btn-shoot.go { background: var(--go); }
+.btn-shoot.out { background: var(--out); }
+.btn-shoot:disabled { background: #555c63; box-shadow: none; opacity: .7; }
+.btn-shoot:active:not(:disabled) { transform: translateY(5px); box-shadow: 0 3px 0 rgba(0,0,0,.28); }
+@media (orientation: portrait) {
+  .cap-body { flex-direction: column; }
+  .cap-side { width: auto; height: 24%; }
+  .cap-name { padding-right: 0; font-size: clamp(30px, 7vw, 54px); }
+}
+.cap-done { position: absolute; inset: 0; z-index: 10; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 20px; text-align: center; }
+.cap-done.show { display: flex; }
+.cap-done.go { background: var(--go); }
+.cap-done.out { background: var(--out); }
+.cap-done .big { font-size: clamp(44px, 8vw, 84px); font-weight: 800; }
+.cap-done .sub { font-size: clamp(26px, 4vw, 40px); font-weight: 700; }
+.cap-done .avatar { width: clamp(120px, 24vh, 220px); height: clamp(120px, 24vh, 220px); font-size: 90px; border: 6px solid #fff; }
+
+/* ───── 画面3：設定 ───── */
+#screen-settings { background: #f4f1e8; }
+.set-wrap { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; padding: 20px 24px 60px; width: 100%; max-width: 760px; margin: 0 auto; }
+.set-wrap h1 { font-size: 26px; margin: 4px 0 14px; }
+.set-wrap h2 { font-size: 19px; margin: 0 0 10px; }
+.card { background: #fff; border-radius: 16px; padding: 16px 18px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.card label.lbl { display: block; font-weight: 700; font-size: 15px; margin: 12px 0 6px; color: #444; }
+.card label.lbl:first-child { margin-top: 0; }
+.card input[type=text], .card input[type=url], .card input[type=password] { width: 100%; font-size: 18px; padding: 12px 14px; border: 2px solid #c9ccd2; border-radius: 10px; background: #fff; color: var(--ink); font-family: inherit; }
+.card .hint { font-size: 13px; color: #777; margin-top: 4px; }
+.seg { display: flex; gap: 8px; }
+.seg label { flex: 1; text-align: center; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg span { display: block; padding: 14px 6px; border-radius: 12px; border: 2px solid #c9ccd2; font-size: 18px; font-weight: 800; background: #fff; }
+.seg input:checked + span { background: var(--accent); border-color: var(--accent); color: #fff; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+.btn { appearance: none; border: 0; border-radius: 12px; padding: 13px 20px; font-size: 17px; font-weight: 800; background: #e2e4e8; color: var(--ink); }
+.btn.primary { background: var(--accent); color: #fff; }
+.btn.danger { background: #fbe1e1; color: var(--danger); }
+.btn.small { padding: 8px 12px; font-size: 14px; }
+.msg { margin-top: 10px; font-size: 16px; font-weight: 700; min-height: 1.4em; }
+.msg.ok { color: #1d7a37; } .msg.err { color: var(--danger); }
+#set-queue { list-style: none; margin: 0; padding: 0; }
+#set-queue li { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid #eee; font-size: 15px; }
+#set-queue li:first-child { border-top: 0; }
+#set-queue .q-main { flex: 1; min-width: 0; }
+#set-queue .q-err { color: var(--danger); font-size: 13px; }
+.q-empty { color: #888; font-size: 15px; }
+
+/* ───── 暗証番号の入力 ───── */
+.modal { position: absolute; inset: 0; z-index: 50; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; padding: 20px; }
+.modal-card { width: 100%; max-width: 420px; background: #fff; border-radius: 20px; padding: 24px; }
+.modal-card h2 { margin: 0 0 12px; font-size: 22px; }
+.modal-card input { width: 100%; font-size: 30px; letter-spacing: .4em; text-align: center; padding: 12px; border: 2px solid #c9ccd2; border-radius: 12px; }
+.modal-card .err { min-height: 1.5em; margin-top: 8px; color: var(--danger); font-weight: 700; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- 画面1：名前一覧 -->
+  <section id="screen-home" class="screen active">
+    <div class="home-head">
+      <div class="home-date" id="home-date"></div>
+      <div class="home-time" id="home-time"></div>
+      <div class="home-group" id="home-group"></div>
+    </div>
+    <div id="hotspot" class="hotspot" aria-hidden="true"></div>
+    <div class="groups" id="groups"></div>
+    <div class="home-foot">
+      <span class="chip" id="chip-unsent" hidden></span>
+      <span class="chip warn" id="chip-net" hidden>つながっていません</span>
+      <span class="ver" id="ver"></span>
+    </div>
+  </section>
+
+  <!-- 画面2：撮影 -->
+  <section id="screen-capture" class="screen">
+    <div class="cap-top">
+      <button class="btn-back" id="btn-back" type="button">◀ もどる</button>
+      <div class="cap-name" id="cap-name"></div>
+    </div>
+    <div class="cap-body">
+      <div class="cap-stage">
+        <video id="cap-video" playsinline muted autoplay></video>
+        <div class="cap-msg" id="cap-msg"></div>
+      </div>
+      <div class="cap-side">
+        <button class="btn-shoot go" id="btn-shoot" type="button" disabled>とうこう</button>
+      </div>
+    </div>
+    <div class="cap-done" id="cap-done">
+      <div class="avatar" id="done-avatar"></div>
+      <div class="big" id="done-big"></div>
+      <div class="sub" id="done-sub"></div>
+    </div>
+  </section>
+
+  <!-- 画面3：設定（スタッフ用） -->
+  <section id="screen-settings" class="screen">
+    <div class="set-wrap">
+      <h1>せってい（スタッフ用）</h1>
+
+      <div class="card">
+        <label class="lbl">学年グループ</label>
+        <div class="seg" id="set-group">
+          <label><input type="radio" name="grp" value="12"><span>1・2年</span></label>
+          <label><input type="radio" name="grp" value="34"><span>3・4年</span></label>
+          <label><input type="radio" name="grp" value="56"><span>5・6年</span></label>
+        </div>
+
+        <label class="lbl" for="set-url">GAS のウェブアプリ URL</label>
+        <input id="set-url" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec">
+
+        <label class="lbl" for="set-token">合言葉（API_TOKEN）</label>
+        <input id="set-token" type="password" autocomplete="off" autocapitalize="off" spellcheck="false">
+
+        <label class="lbl" for="set-pin">暗証番号（4〜6桁の数字）</label>
+        <input id="set-pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off">
+        <div class="hint" id="set-pin-hint"></div>
+
+        <div class="row">
+          <button class="btn" id="set-test" type="button">接続テスト</button>
+          <button class="btn" id="set-roster" type="button">名簿の再読み込み</button>
+        </div>
+        <div class="msg" id="set-msg" role="status"></div>
+      </div>
+
+      <div class="card">
+        <h2>未送信の記録 <span id="set-qcount"></span></h2>
+        <ul id="set-queue"></ul>
+        <div class="row"><button class="btn" id="set-flush" type="button">いま再送</button></div>
+        <div class="msg" id="set-flush-msg" role="status"></div>
+      </div>
+
+      <div class="row" style="margin-top:4px">
+        <button class="btn primary" id="set-save" type="button">保存</button>
+        <button class="btn" id="set-close" type="button">とじる</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 暗証番号の入力 -->
+  <div class="modal" id="pin-modal" hidden>
+    <div class="modal-card">
+      <h2>あんしょうばんごう</h2>
+      <input id="pin-input" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off">
+      <div class="err" id="pin-err" role="alert"></div>
+      <div class="row">
+        <button class="btn" id="pin-cancel" type="button">キャンセル</button>
+        <button class="btn primary" id="pin-ok" type="button">ひらく</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+const APP_VERSION = 'v2';
+const TZ = 'Asia/Tokyo';
+const GROUP_LABEL = { '12': '1・2年', '34': '3・4年', '56': '5・6年' };
+// 子ども向けの文言。1・2年はひらがな、3年生以上は漢字（グループで切り替える）
+const TX = {
+  kana: {
+    group: '1・2ねん', grade: (n) => n + 'ねんせい',
+    inBtn: 'とうこう', outBtn: 'げこう', inLabel: 'とうこう', doneLabel: 'げこうずみ',
+    alreadyOut: 'もう げこうしているよ',
+    inDone: 'とうこう できたよ！', outDone: 'げこう できたよ！',
+    inSub: 'きょうも いちにち がんばろう', outSub: 'きをつけて かえってね',
+    back: '◀ もどる', camPrep: 'カメラを じゅんびしています…',
+    camErr: 'カメラが つかえません', camDenied: 'せんせいに きいてね（カメラの きょかが ひつようです）', camOther: 'せんせいに きいてね',
+    loading: 'なまえを よみこんでいます…\nでてこないときは せんせいに おしえてね', setup: 'せんせいが せっていを してね',
+  },
+  kanji: {
+    group: null, grade: (n) => n + '年生',
+    inBtn: '登校', outBtn: '下校', inLabel: '登校', doneLabel: '下校済み',
+    alreadyOut: 'もう下校しているよ',
+    inDone: '登校できたよ！', outDone: '下校できたよ！',
+    inSub: '今日も一日がんばろう', outSub: '気をつけて帰ってね',
+    back: '◀ 戻る', camPrep: 'カメラを準備しています…',
+    camErr: 'カメラが使えません', camDenied: '先生に聞いてね（カメラの許可が必要です）', camOther: '先生に聞いてね',
+    loading: '名前を読み込んでいます…\n出てこないときは先生に教えてね', setup: '先生が設定をしてね',
+  },
+};
+const T = () => (cfg.group === '12' ? TX.kana : TX.kanji);
+const TODAY_REFRESH_MS = 3 * 60 * 1000;
+const ROSTER_REFRESH_MS = 30 * 60 * 1000;
+const FLUSH_MS = 60 * 1000;
+const IDLE_MS = 30 * 1000;
+const DONE_MS = 2500;
+const HOLD_MS = 3000;
+const PHOTO_WIDTH = 480;
+const PHOTO_QUALITY = 0.7;
+const TRANSIENT = new Set(['network', 'timeout', 'badresponse', 'unauthorized', 'busy', 'server_error']);
+const ERR_TEXT = {
+  unauthorized: '合言葉がちがいます',
+  network: 'つながりません（URL・ネットワークを確認）',
+  timeout: '時間切れです（ネットワークを確認）',
+  badresponse: 'URLがちがうようです（GAS の応答ではありません）',
+  invalid_group: '学年グループがちがいます',
+  server_error: 'GAS 側でエラーが出ています',
+  busy: 'GAS が混み合っています。少し待ってください',
+  unknown_child: '名簿にない児童IDです',
+};
+
+const $ = (s, r = document) => r.querySelector(s);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* ───────── 日時（Asia/Tokyo） ───────── */
+const JST_FMT = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
+const DATE_FMT = new Intl.DateTimeFormat('ja-JP', { timeZone: TZ, month: 'numeric', day: 'numeric', weekday: 'short' });
+function jstParts(ms) {
+  const p = {};
+  for (const x of JST_FMT.formatToParts(new Date(ms))) p[x.type] = x.value;
+  if (p.hour === '24') p.hour = '00';
+  return p;
+}
+const jstStamp = (ms = Date.now()) => { const p = jstParts(ms); return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}:${p.second}`; };
+const jstDate = (ms = Date.now()) => jstStamp(ms).slice(0, 10);
+const hhmm = (stamp) => (stamp ? String(Number(stamp.slice(11, 13))) + ':' + stamp.slice(14, 16) : '');
+
+/* ───────── 保存（localStorage / IndexedDB） ───────── */
+const store = {
+  get(k, d = null) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* 容量不足など。動作は続ける */ } },
+  del(k) { try { localStorage.removeItem(k); } catch (e) { /* noop */ } },
+};
+const K = { settings: 'tokogeko.settings', roster: 'tokogeko.roster', today: 'tokogeko.today', sent: 'tokogeko.recentSent' };
+
+let dbPromise = null;
+function idb() {
+  if (!dbPromise) {
+    dbPromise = new Promise((resolve, reject) => {
+      if (!window.indexedDB) return reject(new Error('indexedDB unavailable'));
+      const r = indexedDB.open('tokogeko', 1);
+      r.onupgradeneeded = () => {
+        const d = r.result;
+        d.createObjectStore('queue', { keyPath: 'recordId' });  // 送信待ち
+        d.createObjectStore('photos', { keyPath: 'childId' });  // 今日の表示用の顔写真
+      };
+      r.onsuccess = () => resolve(r.result);
+      r.onerror = () => reject(r.error);
+    });
+  }
+  return dbPromise;
+}
+function tx(storeName, mode, fn) {
+  return idb().then((db) => new Promise((resolve, reject) => {
+    const t = db.transaction(storeName, mode);
+    let out;
+    const req = fn(t.objectStore(storeName));
+    if (req) req.onsuccess = () => { out = req.result; };
+    t.oncomplete = () => resolve(out);
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error);
+  }));
+}
+const dbPut = (s, v) => tx(s, 'readwrite', (st) => st.put(v));
+const dbDel = (s, k) => tx(s, 'readwrite', (st) => st.delete(k));
+const dbAll = (s) => tx(s, 'readonly', (st) => st.getAll());
+const safe = (p) => p.catch((e) => { console.warn('storage:', e && e.name); });
+
+/* ───────── 状態 ───────── */
+let cfg = store.get(K.settings, {}) || {};
+let rosterCache = store.get(K.roster);   // { group, children, at }
+let todayCache = store.get(K.today);     // { group, date, states:{id:{arrivedAt,departedAt}}, at }
+let recentSent = store.get(K.sent, []) || []; // 送信済みだが、まだ「today」に反映を確認していない記録
+let queue = [];                          // 送信待ち（IndexedDB と同期）
+let photos = {};                         // childId -> dataURL（今日の分）
+let today = jstDate();
+let lastNetOk = true;
+
+const configured = () => !!(cfg.group && cfg.url && cfg.token && cfg.pinHash);
+// 学年ごとに区切って表示するため、念のため学年→並び順で並べ直す（GAS も同じ順で返す）
+const roster = () => (rosterCache && rosterCache.group === cfg.group
+  ? rosterCache.children.slice().sort((a, b) => a.grade - b.grade || a.order - b.order)
+  : []);
+
+class ApiError extends Error { constructor(code) { super(code); this.code = code; } }
+
+/* ───────── API ───────── */
+async function request(url, init) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 25000);
+  let res;
+  try {
+    res = await fetch(url, Object.assign({ redirect: 'follow', signal: ctrl.signal }, init));
+  } catch (e) {
+    throw new ApiError(e && e.name === 'AbortError' ? 'timeout' : 'network');
+  } finally { clearTimeout(timer); }
+  let data;
+  try { data = JSON.parse(await res.text()); } catch (e) { throw new ApiError('badresponse'); }
+  if (!data || data.ok !== true) throw new ApiError((data && data.error) || 'badresponse');
+  return data;
+}
+function apiGet(action, group, conn = cfg) {
+  const u = new URL(conn.url);
+  u.searchParams.set('action', action);
+  u.searchParams.set('group', group);
+  u.searchParams.set('token', conn.token);
+  return request(u.toString());
+}
+function apiPost(rec, resent) {
+  return request(cfg.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // プリフライトを避ける
+    body: JSON.stringify({
+      token: cfg.token, recordId: rec.recordId, childId: rec.childId, type: rec.type,
+      capturedAt: rec.capturedAt, group: rec.group, resent, imageBase64: rec.image,
+    }),
+  });
+}
+function setNet(ok) {
+  lastNetOk = ok;
+  $('#chip-net').hidden = ok;
+}
+
+/* ───────── 児童の状態 ───────── */
+function stateFor(childId) {
+  let arrived = null, departed = null;
+  const take = (type, at) => {
+    if (!at || at.slice(0, 10) !== today) return;
+    if (type === '登校') { if (!arrived || at < arrived) arrived = at; }
+    else if (type === '下校') { if (!departed || at > departed) departed = at; }
+  };
+  if (todayCache && todayCache.group === cfg.group && todayCache.date === today && todayCache.states[childId]) {
+    const s = todayCache.states[childId];
+    take('登校', s.arrivedAt); take('下校', s.departedAt);
+  }
+  for (const r of recentSent) if (r.childId === childId) take(r.type, r.capturedAt);
+  for (const q of queue) if (q.childId === childId) take(q.type, q.capturedAt);
+  const status = departed ? 'done' : arrived ? 'present' : 'before';
+  return { status, arrived, departed };
+}
+
+/* ───────── 画面の切り替え ───────── */
+function show(name) {
+  for (const s of document.querySelectorAll('.screen')) s.classList.toggle('active', s.id === 'screen-' + name);
+}
+const current = () => (document.querySelector('.screen.active') || {}).id;
+
+/* ───────── 画面1：名前一覧 ───────── */
+function rubyOf(base, yomi) {
+  if (!yomi || base === yomi) return document.createTextNode(base); // ひらがなだけの部分はそのまま
+  const ruby = document.createElement('ruby');
+  ruby.append(base);
+  const rt = document.createElement('rt');
+  rt.textContent = yomi;
+  ruby.append(rt);
+  return ruby;
+}
+// 名前は漢字で表示する。1・2年は「よみ」をふりがなにする（姓・名の数が合えば、それぞれに付ける）
+function nameNode(c) {
+  if (!(Number(c.grade) <= 2 && c.yomi)) return document.createTextNode(c.name);
+  const split = (v) => String(v).split(/[\s\u3000]+/).filter(Boolean);
+  const names = split(c.name), yomis = split(c.yomi);
+  const frag = document.createDocumentFragment();
+  if (names.length > 1 && names.length === yomis.length) {
+    names.forEach((n, i) => { if (i) frag.append(' '); frag.append(rubyOf(n, yomis[i])); });
+  } else {
+    frag.append(rubyOf(c.name, c.yomi));
+  }
+  return frag;
+}
+function renderHome() {
+  const wrap = $('#groups');
+  wrap.replaceChildren();
+  $('#home-group').textContent = T().group || GROUP_LABEL[cfg.group] || '';
+  const list = roster();
+  if (!list.length) {
+    const d = document.createElement('div');
+    d.className = 'empty-note';
+    d.textContent = configured() ? T().loading : T().setup;
+    d.style.whiteSpace = 'pre-line';
+    wrap.append(d);
+  }
+  let box = null, grade = null;
+  for (const c of list) {
+    if (c.grade !== grade) {
+      grade = c.grade;
+      const sec = document.createElement('div');
+      sec.className = 'grade';
+      const label = document.createElement('div');
+      label.className = 'grade-label';
+      label.textContent = T().grade(grade);
+      box = document.createElement('div');
+      box.className = 'tiles';
+      sec.append(label, box);
+      wrap.append(sec);
+    }
+    const st = stateFor(c.childId);
+    const tile = document.createElement('button');
+    tile.type = 'button';
+    tile.className = 'tile s-' + st.status;
+    tile.dataset.id = c.childId;
+    if (st.status !== 'before') {
+      const av = document.createElement('div');
+      av.className = 'avatar';
+      if (photos[c.childId]) {
+        const img = document.createElement('img');
+        img.src = photos[c.childId];
+        img.alt = '';
+        av.append(img);
+      } else {
+        av.textContent = (c.name || '?').trim().charAt(0);
+      }
+      tile.append(av);
+    }
+    const nm = document.createElement('div');
+    nm.append(nameNode(c));
+    tile.append(nm);
+    if (st.status !== 'before') {
+      const lb = document.createElement('div');
+      lb.className = 'tile-label';
+      lb.textContent = st.status === 'present' ? T().inLabel + ' ' + hhmm(st.arrived) : T().doneLabel;
+      tile.append(lb);
+    }
+    tile.addEventListener('click', () => openCapture(c));
+    box.append(tile);
+  }
+  renderBadge();
+  fitTiles();
+}
+// スクロールなしで全員が収まるように、はみ出すときだけタイルを少しずつ小さくする
+function fitTiles() {
+  const wrap = $('#groups');
+  if (!wrap.offsetParent) return; // ホーム画面が表示されていないときは測れない
+  let k = 1;
+  for (; k > 0.56; k -= 0.05) {
+    document.documentElement.style.setProperty('--k', k.toFixed(2));
+    if (wrap.scrollHeight <= wrap.clientHeight + 1) break;
+  }
+}
+function renderBadge() {
+  const chip = $('#chip-unsent');
+  chip.hidden = queue.length === 0;
+  chip.textContent = '未送信 ' + queue.length + '件';
+}
+function tickClock() {
+  const now = Date.now();
+  const p = jstParts(now);
+  $('#home-date').textContent = DATE_FMT.format(new Date(now));
+  $('#home-time').textContent = p.hour + ':' + p.minute;
+  const d = jstDate(now);
+  if (d !== today) onNewDay(d);
+}
+async function onNewDay(d) {
+  today = d;
+  await purgeOldPhotos();
+  recentSent = recentSent.filter((r) => r.capturedAt.slice(0, 10) === today);
+  store.set(K.sent, recentSent);
+  renderHome();
+  if (configured()) { refreshRoster(); refreshToday(); }
+}
+async function purgeOldPhotos() {
+  try {
+    const all = await dbAll('photos');
+    for (const p of all) if (p.date !== today) await dbDel('photos', p.childId);
+    photos = {};
+    for (const p of all) if (p.date === today) photos[p.childId] = p.dataUrl;
+  } catch (e) { photos = {}; }
+}
+
+/* ───────── 名簿・今日の状態の取得 ───────── */
+let rosterBusy = false, todayBusy = false;
+async function refreshRoster() {
+  if (!configured() || rosterBusy) return { ok: false, code: 'busy' };
+  rosterBusy = true;
+  try {
+    const d = await apiGet('roster', cfg.group);
+    rosterCache = { group: cfg.group, children: d.children, at: Date.now() };
+    store.set(K.roster, rosterCache);
+    setNet(true);
+    renderHome();
+    return { ok: true, count: d.children.length };
+  } catch (e) {
+    handleNetErr(e);
+    return { ok: false, code: e.code };
+  } finally { rosterBusy = false; }
+}
+async function refreshToday() {
+  if (!configured() || todayBusy) return { ok: false, code: 'busy' };
+  todayBusy = true;
+  const started = Date.now();
+  try {
+    const d = await apiGet('today', cfg.group);
+    const states = {};
+    for (const s of d.states) states[s.childId] = s;
+    todayCache = { group: cfg.group, date: d.date, states, at: started };
+    store.set(K.today, todayCache);
+    recentSent = recentSent.filter((r) => r.sentAt >= started); // 反映を確認できた分は卒業
+    store.set(K.sent, recentSent);
+    setNet(true);
+    renderHome();
+    return { ok: true };
+  } catch (e) {
+    handleNetErr(e);
+    return { ok: false, code: e.code };
+  } finally { todayBusy = false; }
+}
+function handleNetErr(e) {
+  if (e && (e.code === 'network' || e.code === 'timeout' || e.code === 'badresponse')) setNet(false);
+}
+
+/* ───────── 送信キュー ───────── */
+let flushing = false, flushAgain = false;
+async function flushQueue() {
+  if (!configured()) return { sent: 0, left: queue.length, error: 'notconfigured' };
+  if (flushing) { flushAgain = true; return { sent: 0, left: queue.length, error: 'busy' }; }
+  flushing = true;
+  let sent = 0, error = null;
+  try {
+    do {
+      flushAgain = false;
+      const items = queue.slice().sort((a, b) => (a.capturedAt < b.capturedAt ? -1 : 1));
+      for (const it of items) {
+        if (!queue.includes(it)) continue;
+        const resent = (it.attempts || 0) > 0;
+        it.attempts = (it.attempts || 0) + 1;
+        await safe(dbPut('queue', it));
+        try {
+          await apiPost(it, resent);
+          queue = queue.filter((q) => q !== it);
+          await safe(dbDel('queue', it.recordId));
+          recentSent.push({ recordId: it.recordId, childId: it.childId, type: it.type, capturedAt: it.capturedAt, sentAt: Date.now() });
+          store.set(K.sent, recentSent);
+          setNet(true);
+          sent++;
+          renderBadge();
+        } catch (e) {
+          it.lastError = e.code || 'error';
+          await safe(dbPut('queue', it));
+          handleNetErr(e);
+          error = e.code;
+          if (TRANSIENT.has(e.code)) { flushAgain = false; break; } // 全部失敗するので止める
+        }
+      }
+    } while (flushAgain);
+  } finally { flushing = false; renderBadge(); if (current() === 'screen-settings') renderQueueList(); }
+  if (sent) refreshToday();
+  return { sent, left: queue.length, error };
+}
+
+/* ───────── 画面2：撮影 ───────── */
+const video = $('#cap-video');
+const cap = { child: null, stream: null, session: 0, busy: false, idle: null, doneTimer: null };
+
+function setCapMsg(html, sub) {
+  const m = $('#cap-msg');
+  m.replaceChildren();
+  if (html) {
+    m.append(document.createTextNode(html));
+    if (sub) { const s = document.createElement('small'); s.textContent = sub; m.append(s); }
+  }
+  m.hidden = !html;
+}
+function bumpIdle() {
+  clearTimeout(cap.idle);
+  cap.idle = setTimeout(backHome, IDLE_MS);
+}
+function stopCamera() {
+  cap.session++;
+  if (cap.stream) { for (const t of cap.stream.getTracks()) t.stop(); cap.stream = null; }
+  video.srcObject = null;
+}
+function backHome() {
+  clearTimeout(cap.idle); clearTimeout(cap.doneTimer);
+  stopCamera();
+  cap.busy = false; cap.child = null;
+  $('#cap-done').classList.remove('show');
+  show('home');
+  renderHome();
+}
+async function openCapture(child) {
+  const st = stateFor(child.childId);
+  cap.child = child; cap.busy = false;
+  const nm = $('#cap-name');
+  nm.replaceChildren(nameNode(child));
+  $('#btn-back').textContent = T().back;
+  const btn = $('#btn-shoot');
+  show('capture');
+  bumpIdle();
+  if (st.status === 'done') {
+    btn.hidden = true;
+    video.hidden = true;
+    setCapMsg(T().alreadyOut);
+    return;
+  }
+  video.hidden = false;
+  btn.hidden = false;
+  btn.disabled = true;
+  const isIn = st.status === 'before';
+  btn.textContent = isIn ? T().inBtn : T().outBtn;
+  btn.className = 'btn-shoot ' + (isIn ? 'go' : 'out');
+  setCapMsg(T().camPrep);
+  const my = ++cap.session;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 960 }, height: { ideal: 720 } }, audio: false });
+    if (my !== cap.session) { for (const t of stream.getTracks()) t.stop(); return; } // 待っている間にもどった
+    cap.stream = stream;
+    video.srcObject = stream;
+    await video.play().catch(() => {});
+    const ready = () => { if (my === cap.session && video.videoWidth) { setCapMsg(''); btn.disabled = false; } };
+    if (video.videoWidth) ready(); else video.addEventListener('loadeddata', ready, { once: true });
+  } catch (e) {
+    if (my !== cap.session) return;
+    const denied = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
+    setCapMsg(T().camErr, denied ? T().camDenied : T().camOther);
+  }
+}
+async function shoot() {
+  const child = cap.child;
+  if (!child || cap.busy || !video.videoWidth) return;
+  const st = stateFor(child.childId);
+  if (st.status === 'done') return;
+  cap.busy = true;
+  clearTimeout(cap.idle);
+  const type = st.status === 'before' ? '登校' : '下校';
+
+  const w = PHOTO_WIDTH, h = Math.round(video.videoHeight * w / video.videoWidth);
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  canvas.getContext('2d').drawImage(video, 0, 0, w, h); // 撮影画像は鏡像にしない（プレビューだけ鏡像）
+  const dataUrl = canvas.toDataURL('image/jpeg', PHOTO_QUALITY);
+
+  const now = Date.now();
+  const rec = {
+    recordId: uuid(), childId: child.childId, name: child.name, type,
+    capturedAt: jstStamp(now), group: cfg.group, image: dataUrl, attempts: 0,
+  };
+  queue.push(rec);                          // まず送信待ちに入れる → 画面はすぐ「登校中／下校済み」
+  photos[child.childId] = dataUrl;
+  await safe(dbPut('queue', rec));
+  await safe(dbPut('photos', { childId: child.childId, date: today, type, dataUrl }));
+  stopCamera();
+
+  const isIn = type === '登校';
+  const done = $('#cap-done');
+  done.className = 'cap-done show ' + (isIn ? 'go' : 'out');
+  const av = $('#done-avatar');
+  av.replaceChildren();
+  const img = document.createElement('img'); img.src = dataUrl; img.alt = ''; av.append(img);
+  $('#done-big').textContent = isIn ? T().inDone : T().outDone;
+  $('#done-sub').textContent = isIn ? T().inSub : T().outSub;
+  renderBadge();
+  cap.doneTimer = setTimeout(backHome, DONE_MS);
+  flushQueue();                              // 送信はあと（失敗してもキューに残る）
+}
+function uuid() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+  const h = [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
+/* ───────── 暗証番号 ───────── */
+const hexOf = (u8) => [...u8].map((x) => x.toString(16).padStart(2, '0')).join('');
+const bytesOf = (hex) => new Uint8Array(hex.match(/../g).map((x) => parseInt(x, 16)));
+async function hashPin(pin, saltHex) {
+  if (!(window.crypto && crypto.subtle)) throw new Error('crypto.subtle unavailable (HTTPS が必要)');
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: bytesOf(saltHex), iterations: 100000, hash: 'SHA-256' }, key, 256);
+  return hexOf(new Uint8Array(bits));
+}
+let pinFails = 0, pinLockUntil = 0;
+function openPinModal() {
+  if (!configured()) { openSettings(); return; }
+  $('#pin-input').value = '';
+  $('#pin-err').textContent = '';
+  $('#pin-modal').hidden = false;
+  setTimeout(() => $('#pin-input').focus(), 50);
+}
+async function submitPin() {
+  const err = $('#pin-err');
+  const wait = pinLockUntil - Date.now();
+  if (wait > 0) { err.textContent = Math.ceil(wait / 1000) + '秒 まってね'; return; }
+  const pin = $('#pin-input').value.trim();
+  let ok = false;
+  try { ok = (await hashPin(pin, cfg.pinSalt)) === cfg.pinHash; } catch (e) { err.textContent = '暗証番号を確認できません'; return; }
+  if (ok) {
+    pinFails = 0;
+    $('#pin-modal').hidden = true;
+    openSettings();
+  } else {
+    pinFails++;
+    $('#pin-input').value = '';
+    if (pinFails >= 5) { pinLockUntil = Date.now() + 30000; pinFails = 0; err.textContent = 'まちがいが おおいので 30秒 まってね'; }
+    else err.textContent = 'ちがいます';
+  }
+}
+
+/* ───────── 画面3：設定 ───────── */
+function formValues() {
+  const g = document.querySelector('input[name=grp]:checked');
+  return { group: g ? g.value : '', url: $('#set-url').value.trim(), token: $('#set-token').value.trim(), pin: $('#set-pin').value.trim() };
+}
+function normUrl(v) {
+  try {
+    const u = new URL(v);
+    const local = u.hostname === 'localhost' || u.hostname === '127.0.0.1';
+    if (u.protocol === 'https:' || (local && u.protocol === 'http:')) { u.search = ''; u.hash = ''; return u.toString(); }
+  } catch (e) { /* noop */ }
+  return null;
+}
+function setMsg(el, text, cls) { el.textContent = text || ''; el.className = 'msg' + (cls ? ' ' + cls : ''); }
+function openSettings() {
+  stopCamera();
+  clearTimeout(cap.idle);
+  for (const r of document.querySelectorAll('input[name=grp]')) r.checked = r.value === cfg.group;
+  $('#set-url').value = cfg.url || '';
+  $('#set-token').value = cfg.token || '';
+  $('#set-pin').value = '';
+  $('#set-pin-hint').textContent = cfg.pinHash ? '変更するときだけ入力（空欄のままなら今の暗証番号を使います）' : '最初に決めてください。忘れると、この端末の設定をやり直すことになります。';
+  setMsg($('#set-msg'), '');
+  setMsg($('#set-flush-msg'), '');
+  renderQueueList();
+  show('settings');
+}
+function renderQueueList() {
+  const ul = $('#set-queue');
+  ul.replaceChildren();
+  $('#set-qcount').textContent = queue.length ? `（${queue.length}件）` : '';
+  if (!queue.length) {
+    const li = document.createElement('li');
+    li.className = 'q-empty';
+    li.textContent = '未送信の記録はありません';
+    ul.append(li);
+    return;
+  }
+  for (const q of queue.slice().sort((a, b) => (a.capturedAt < b.capturedAt ? -1 : 1))) {
+    const li = document.createElement('li');
+    const main = document.createElement('div');
+    main.className = 'q-main';
+    main.textContent = `${q.name}　${q.type}　${q.capturedAt.slice(5, 16)}　（試行 ${q.attempts || 0}回）`;
+    if (q.lastError) {
+      const e = document.createElement('div');
+      e.className = 'q-err';
+      e.textContent = ERR_TEXT[q.lastError] || q.lastError;
+      main.append(e);
+    }
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'btn small danger';
+    del.textContent = '削除';
+    del.addEventListener('click', async () => {
+      if (!confirm(`${q.name} の ${q.type} の記録を、送信せずに削除します。よろしいですか？`)) return;
+      queue = queue.filter((x) => x !== q);
+      await safe(dbDel('queue', q.recordId));
+      renderQueueList(); renderBadge();
+    });
+    li.append(main, del);
+    ul.append(li);
+  }
+}
+async function saveSettings() {
+  const msg = $('#set-msg');
+  const v = formValues();
+  const url = normUrl(v.url);
+  if (!v.group) return setMsg(msg, '学年グループを選んでください', 'err');
+  if (!url) return setMsg(msg, 'URL は https:// で始まる GAS のウェブアプリ URL を入れてください', 'err');
+  if (!v.token) return setMsg(msg, '合言葉を入れてください', 'err');
+  const next = Object.assign({}, cfg, { group: v.group, url, token: v.token });
+  if (v.pin || !cfg.pinHash) {
+    if (!/^\d{4,6}$/.test(v.pin)) return setMsg(msg, '暗証番号は4〜6桁の数字で入れてください', 'err');
+    try {
+      const salt = hexOf(crypto.getRandomValues(new Uint8Array(16)));
+      next.pinSalt = salt;
+      next.pinHash = await hashPin(v.pin, salt);
+    } catch (e) { return setMsg(msg, '暗証番号を保存できません（HTTPS の URL で開いてください）', 'err'); }
+  }
+  const groupChanged = next.group !== cfg.group;
+  cfg = next;
+  store.set(K.settings, cfg);
+  if (groupChanged) { rosterCache = null; todayCache = null; store.del(K.roster); store.del(K.today); }
+  $('#set-pin').value = '';
+  setMsg(msg, '保存しました。名簿を読み込んでいます…', 'ok');
+  renderHome();
+  const r = await refreshRoster();
+  refreshToday();
+  flushQueue();
+  setMsg(msg, r.ok ? `保存しました（名簿 ${r.count}人）` : '保存しました。ただし名簿を読み込めませんでした：' + (ERR_TEXT[r.code] || r.code), r.ok ? 'ok' : 'err');
+}
+async function testConnection() {
+  const msg = $('#set-msg');
+  const v = formValues();
+  const url = normUrl(v.url);
+  if (!v.group || !url || !v.token) return setMsg(msg, '学年グループ・URL・合言葉を入れてください', 'err');
+  setMsg(msg, 'つないでいます…');
+  try {
+    const d = await apiGet('roster', v.group, { url, token: v.token });
+    setMsg(msg, `つながりました（${GROUP_LABEL[v.group]}：${d.children.length}人）`, 'ok');
+  } catch (e) {
+    setMsg(msg, '失敗：' + (ERR_TEXT[e.code] || e.code), 'err');
+  }
+}
+async function reloadRoster() {
+  const msg = $('#set-msg');
+  if (!configured()) return setMsg(msg, '先に保存してください', 'err');
+  setMsg(msg, '読み込んでいます…');
+  const r = await refreshRoster();
+  if (r.ok) { refreshToday(); setMsg(msg, `名簿を読み込みました（${r.count}人）`, 'ok'); }
+  else setMsg(msg, '失敗：' + (ERR_TEXT[r.code] || r.code), 'err');
+}
+async function flushNow() {
+  const msg = $('#set-flush-msg');
+  if (!queue.length) return setMsg(msg, '未送信の記録はありません', 'ok');
+  setMsg(msg, '送信しています…');
+  const r = await flushQueue();
+  renderQueueList();
+  if (!r.left) setMsg(msg, `送信しました（${r.sent}件）`, 'ok');
+  else setMsg(msg, `残り ${r.left}件。${r.error ? ERR_TEXT[r.error] || r.error : ''}`, 'err');
+}
+function closeSettings() {
+  if (!configured()) return setMsg($('#set-msg'), '最初の設定（学年グループ・URL・合言葉・暗証番号）を保存してください', 'err');
+  show('home');
+  renderHome();
+}
+
+/* ───────── 3秒長押し（右上の隅） ───────── */
+(() => {
+  const hs = $('#hotspot');
+  let t = null;
+  const stop = () => { clearTimeout(t); t = null; };
+  hs.addEventListener('pointerdown', (e) => { e.preventDefault(); stop(); t = setTimeout(() => { t = null; openPinModal(); }, HOLD_MS); });
+  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) hs.addEventListener(ev, stop);
+})();
+
+/* ───────── ズーム・選択などの無効化 ───────── */
+for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
+document.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+document.addEventListener('dblclick', (e) => e.preventDefault());
+document.addEventListener('contextmenu', (e) => { if (!/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) e.preventDefault(); });
+document.addEventListener('selectstart', (e) => { if (!/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) e.preventDefault(); });
+
+/* ───────── 配線 ───────── */
+$('#btn-back').addEventListener('click', backHome);
+$('#btn-shoot').addEventListener('click', shoot);
+$('#screen-capture').addEventListener('pointerdown', () => { if (!cap.busy) bumpIdle(); }, true);
+$('#pin-ok').addEventListener('click', submitPin);
+$('#pin-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') submitPin(); });
+$('#pin-cancel').addEventListener('click', () => { $('#pin-modal').hidden = true; });
+$('#set-save').addEventListener('click', saveSettings);
+$('#set-test').addEventListener('click', testConnection);
+$('#set-roster').addEventListener('click', reloadRoster);
+$('#set-flush').addEventListener('click', flushNow);
+$('#set-close').addEventListener('click', closeSettings);
+window.addEventListener('resize', () => { if (current() === 'screen-home') fitTiles(); });
+window.addEventListener('online', () => { flushQueue(); refreshToday(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') { tickClock(); flushQueue(); refreshToday(); }
+});
+
+/* ───────── 起動 ───────── */
+(async function start() {
+  $('#ver').textContent = APP_VERSION;
+  tickClock();
+  setInterval(tickClock, 1000);
+  // 前回の「送信待ち」を読み戻す
+  try { queue = await dbAll('queue'); } catch (e) { queue = []; }
+  await purgeOldPhotos();
+  renderHome();
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch((e) => console.warn('sw:', e && e.name));
+  }
+  // 定期処理。未設定のうちは各関数が何もしない（設定を保存すればそのまま動き出す）
+  setInterval(flushQueue, FLUSH_MS);
+  setInterval(refreshToday, TODAY_REFRESH_MS);
+  setInterval(refreshRoster, ROSTER_REFRESH_MS);
+
+  if (!configured()) { openSettings(); return; }
+  flushQueue();
+  refreshRoster();
+  refreshToday();
+})();
+})();
+</script>
+</body>
+</html>

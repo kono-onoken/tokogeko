@@ -1,0 +1,22 @@
+# clasp（scriptIdを含むためコミットしない）
+.clasp.json
+.clasprc.json
+
+# 認証情報・設定値（URL・合言葉・各種IDはコミットしない）
+.env
+.env.*
+*.local
+config.local.*
+secrets*
+
+# OS・エディタ
+.DS_Store
+.idea/
+.vscode/
+
+# Node
+node_modules/
+
+# 一時ファイル
+*.log
+*.tmp
