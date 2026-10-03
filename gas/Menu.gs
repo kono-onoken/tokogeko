@@ -131,6 +131,11 @@ function menuPostSelectedDrafts() {
     alert_('Slackに投稿', 'Slack の投稿先（Webhook）が、設定されていません。投稿はしませんでした。\n\n下書きのセルをコピーして、Slack に貼り付けてください。\n貼り付けたあと、状態を「' + DRAFT_STATE_SENT + '」に、手で変えてください。');
     return;
   }
+  if (!isSlackWebhookUrl_(webhook)) {
+    alert_('Slackに投稿', 'スクリプトプロパティ SLACK_WEBHOOK_URL が、Slack の Incoming Webhook の URL ではありません（入っている値のドメイン：' + urlHostOnly_(webhook) +
+      '）。投稿はしませんでした。\n\nWebhook の URL は「https://hooks.slack.com/services/…」の形です。チャンネルの URL ではありません。\nSlack の「Incoming Webhooks」で作った URL を、設定し直してください。');
+    return;
+  }
   var summary = sel.items.map(function (it) { return it.teacher + '：' + it.count + '件'; }).join('\n');
   if (!confirm_('Slackに投稿しますか？', '次の ' + sel.items.length + '人宛てに、Slack に投稿します。\n\n' + summary + '\n\n投稿すると、取り消せません。')) return;
 

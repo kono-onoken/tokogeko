@@ -124,6 +124,17 @@ function slackErrorHint_(code, reason) {
   return '';
 }
 
+/** Incoming Webhook の URL の形か（https://hooks.slack.com/services/T…/B…/…）。チャンネルの URL などは、投稿先にしない。 */
+function isSlackWebhookUrl_(url) {
+  return /^https:\/\/hooks\.slack\.com\/services\/[A-Za-z0-9]+\/[A-Za-z0-9]+\/[A-Za-z0-9]+$/.test(String(url));
+}
+
+/** URL のドメイン名だけを返す（URL 全体は、メッセージに出さない）。 */
+function urlHostOnly_(url) {
+  var m = /^https?:\/\/([^\/?#\s]+)/.exec(String(url));
+  return m ? m[1] : '（URL の形ではありません）';
+}
+
 /** スクリプトプロパティの Webhook URL から、混ざった空白・改行・引用符を取り除く。 */
 function cleanWebhookUrl_(raw) {
   return String(raw || '').replace(/\s/g, '').replace(/^["'「]+|["'」]+$/g, '');
