@@ -245,6 +245,113 @@ function markGroup_(m) {
   return m === '○' || m === '●' || m === '公' ? '出席' : m;
 }
 
+// ───────────────────────── 照合結果シートへの書き込み（CLAUDE.md 8-6） ─────────────────────────
+
+// 照合結果の列（0始まり）：A〜P は照合が書く。Q〜T（対応・担任の回答・メモ・Slack送信日時）は人が書く
+var RC = { key: 0, yymm: 1, date: 2, weekday: 3, id: 4, name: 5, grade: 6, homeroom: 7, event: 8, appIn: 9, appOut: 10,
+  natural: 11, bookMark: 12, bookTimes: 13, type: 14, desc: 15, action: 16, reply: 17, memo: 18, sentAt: 19 };
+var RESOLVED_PREFIX = '（解消）';
+var OPEN_ACTIONS = ['未確認', '担任に確認'];
+
+/** 不一致1件を、照合結果の A〜P の行にする。 */
+function mismatchToRow_(m) {
+  return [m.key, m.yymm, m.date, m.weekday, m.childId, m.name, m.grade, m.homeroom, m.event, m.appIn, m.appOut,
+    m.natural, m.bookMark, m.bookTimes, m.typeLabel, m.description];
+}
+
+/**
+ * 既存の照合結果の行（A〜T）と、今回の不一致を突き合わせる（純粋な関数）。
+ *  - キーが一致する行：A〜P だけを更新する。Q〜T（人が書いた欄）は残す。
+ *  - 新しく出た不一致：行を追加する（対応は「未確認」）。
+ *  - 同じ月で、今回出なくなった不一致：削除せず、P の先頭に「（解消）」を付け、対応を「完了」にする。
+ *  - 「（解消）」にした行が、再び出た場合：説明を更新し、対応を「未確認」に戻す。
+ * @return {{updated: Array, appended: Array, actionChanges: Object, stats: Object}}
+ */
+function mergeResultRows_(existing, mismatches, yymm) {
+  var idx = {};
+  existing.forEach(function (r, i) { if (String(r[RC.key])) idx[String(r[RC.key])] = i; });
+  var updated = existing.map(function (r) { return r.slice(); });
+  var appended = [];
+  var actionChanges = {}; // 行の位置 → 新しい対応（人が書いた Q を、機械が書き換えた行だけ）
+  var seen = {};
+  var stats = { added: 0, updated: 0, resolved: 0, reopened: 0 };
+
+  mismatches.forEach(function (m) {
+    var base = mismatchToRow_(m);
+    seen[m.key] = true;
+    var i = idx[m.key];
+    if (i === undefined) {
+      appended.push(base.concat(['未確認', '', '', '']));
+      stats.added++;
+      return;
+    }
+    var r = updated[i];
+    var wasResolved = String(r[RC.desc]).indexOf(RESOLVED_PREFIX) === 0;
+    for (var c = 0; c <= RC.desc; c++) r[c] = base[c];
+    if (wasResolved) { r[RC.action] = '未確認'; actionChanges[i] = '未確認'; stats.reopened++; }
+    stats.updated++;
+  });
+
+  existing.forEach(function (orig, i) {
+    var k = String(orig[RC.key]);
+    if (!k || k.split('|')[0] !== String(yymm) || seen[k]) return;
+    var r = updated[i];
+    if (String(r[RC.desc]).indexOf(RESOLVED_PREFIX) !== 0) { r[RC.desc] = RESOLVED_PREFIX + r[RC.desc]; stats.resolved++; }
+    if (String(r[RC.action]) !== '完了') { r[RC.action] = '完了'; actionChanges[i] = '完了'; }
+  });
+  return { updated: updated, appended: appended, actionChanges: actionChanges, stats: stats };
+}
+
+/** 前月以前に、対応が「未確認」「担任に確認」のまま残っている件数。 */
+function countOpenBefore_(rows, yymm) {
+  var out = { unconfirmed: 0, askTeacher: 0 };
+  rows.forEach(function (r) {
+    var month = String(r[RC.key]).split('|')[0];
+    if (!/^\d{4}$/.test(month) || Number(month) >= Number(yymm)) return;
+    var a = String(r[RC.action]);
+    if (a === '未確認') out.unconfirmed++;
+    else if (a === '担任に確認') out.askTeacher++;
+  });
+  return out;
+}
+
+/**
+ * 照合を実行して、結果を照合結果シートに書く。出席簿は読み取りだけ。
+ * 同じ月を再実行しても、人が書いた欄（対応・担任の回答・メモ・Slack送信日時）は消さない。
+ */
+function runReconcileAndWrite_(yymm) {
+  var res = reconcileMonth_(yymm);
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new Error('ほかの処理が実行中です。少し待ってから、もう一度実行してください。');
+  try {
+    var sheet = getSheet_(SHEET_RESULT);
+    var last = sheet.getLastRow();
+    var existing = last >= 2 ? sheet.getRange(2, 1, last - 1, 20).getValues() : [];
+    var openBefore = countOpenBefore_(existing, yymm);
+    var merged = mergeResultRows_(existing, res.mismatches, yymm);
+
+    if (existing.length) {
+      // 日付・時刻・児童IDを、シートが自動で変換しないよう、書式を文字列にしてから書く
+      var top = sheet.getRange(2, 1, existing.length, 16);
+      top.setNumberFormat('@');
+      top.setValues(merged.updated.map(function (r) { return r.slice(0, 16); }));
+      Object.keys(merged.actionChanges).forEach(function (i) {
+        sheet.getRange(Number(i) + 2, RC.action + 1).setValue(merged.actionChanges[i]);
+      });
+    }
+    if (merged.appended.length) {
+      var start = sheet.getLastRow() + 1;
+      sheet.getRange(start, 1, merged.appended.length, 16).setNumberFormat('@');
+      sheet.getRange(start, 1, merged.appended.length, 20).setValues(merged.appended);
+      sheet.getRange(start, RC.sentAt + 1, merged.appended.length, 1).setNumberFormat('@');
+    }
+    SpreadsheetApp.flush();
+    return { res: res, stats: merged.stats, openBefore: openBefore };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 // ───────────────────────── 試し実行（エディタから。件数だけをログに出す） ─────────────────────────
 
 /**

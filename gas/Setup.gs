@@ -75,7 +75,7 @@ function setup() {
   var settings = ensureSheet_(ss, SHEET_SETTINGS, SETTINGS_HEADERS);
   var exceptions = ensureSheet_(ss, SHEET_EXCEPTIONS, EXCEPTION_HEADERS);
   var result = ensureSheet_(ss, SHEET_RESULT, RESULT_HEADERS);
-  ensureSheet_(ss, SHEET_DRAFT, DRAFT_HEADERS);
+  var draft = ensureSheet_(ss, SHEET_DRAFT, DRAFT_HEADERS);
 
   // 6桁の児童ID・撮影日時・受信日時を、シートが数値や日時に自動変換しないよう、書式を文字列に固定する
   roster.getRange('A:A').setNumberFormat('@');
@@ -85,6 +85,7 @@ function setup() {
   fillSettingsDefaults_(settings);
   prepareExceptions_(exceptions);
   prepareResult_(result);
+  prepareDraft_(draft);
   removeEmptyDefaultSheet_(ss);
   checkRosterHeaders_(roster);
   Logger.log('シートを確認しました: ' + ss.getName());
@@ -165,6 +166,18 @@ function prepareResult_(sheet) {
       .build();
   });
   sheet.setConditionalFormatRules(rules);
+}
+
+/** Slack下書き：文面のセルは折り返して全体を表示し、「状態」はプルダウンにする。 */
+function prepareDraft_(sheet) {
+  sheet.getRange('A:A').setNumberFormat('@');
+  sheet.getRange('E:E').setWrap(true);
+  sheet.getRange('E2:E1000').setVerticalAlignment('top');
+  sheet.setColumnWidth(5, 520);
+  sheet.setColumnWidth(8, 120);
+  sheet.getRange('H:H').setFontSize(8).setFontColor('#888888');
+  var rule = SpreadsheetApp.newDataValidation().requireValueInList(['下書き', '送信済み'], true).setAllowInvalid(false).build();
+  sheet.getRange('F2:F1000').setDataValidation(rule);
 }
 
 function removeEmptyDefaultSheet_(ss) {

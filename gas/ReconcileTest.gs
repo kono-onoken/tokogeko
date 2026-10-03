@@ -236,3 +236,108 @@ function countTestRecords_(sheet) {
   if (last < 2) return 0;
   return sheet.getRange(2, 1, last - 1, 1).getValues().filter(function (r) { return String(r[0]).indexOf('TEST-') === 0; }).length;
 }
+
+// ───────────────────────── 段階7の動作確認用（出席簿への入力は不要） ─────────────────────────
+//
+// アプリ側の記録だけで、③・⑤を出して、照合結果シートとSlack下書きの操作を試す。
+//  1. printStage7TestPlan で手順を見る  2. insertStage7TestData でテスト記録を入れる
+//  3. メニュー「照合」→「月を選んで照合」で 2611 を照合し、照合結果シートを見る
+//  4. removeStage7TestData で、テストで出た行を消す（テストの児童・日付の行だけを消す）
+
+/** テスト用の児童：担任が複数になるよう、担任ごとの先頭の児童を選び（最大4人）、足りなければ名簿の先頭から足す。 */
+function pickStage7Kids_() {
+  var kids = readRosterRows_().filter(function (c) { return c.enrolled; })
+    .sort(function (a, b) { return a.grade - b.grade || a.sort - b.sort || a.row - b.row; });
+  if (kids.length < 4) throw new Error('テストには、在籍の児童が4人以上必要です（いま' + kids.length + '人）。');
+  var picked = [], seenRoom = {};
+  kids.forEach(function (c) {
+    var room = c.homeroom || NO_HOMEROOM;
+    if (picked.length < 4 && !seenRoom[room]) { seenRoom[room] = true; picked.push(c); }
+  });
+  kids.forEach(function (c) { if (picked.length < 4 && picked.indexOf(c) < 0) picked.push(c); });
+  return picked;
+}
+
+/** [児童, 日, 登校, 下校] の4件。 */
+function stage7TestPlan_() {
+  var k = pickStage7Kids_();
+  return [[k[0], 2, '8:10', '15:50'], [k[1], 2, '8:31', null], [k[2], 3, '8:10', '15:50'], [k[3], 4, '8:10', '15:50']];
+}
+
+function printStage7TestPlan() {
+  Logger.log('【段階7の動作確認】出席簿には、何も入力しません。');
+  Logger.log('1. insertStage7TestData を実行（記録シートに、11月のテスト記録 TEST-S7- が入ります）');
+  Logger.log('2. メニュー「照合」→「月を選んで照合」→ 2611 → 照合結果シートに、③（出席簿が空欄）や⑤（下校なし）の行が出ます');
+  Logger.log('3. 照合結果シートで、2〜3行の「対応」を「担任に確認」にし、別の行の「メモ」「担任の回答」に、何か書く');
+  Logger.log('4. メニュー「照合」→「Slack下書きを作成」→ 2611 → Slack下書きシートに、担任ごとの下書きができます。文面のセルを直接直してみる');
+  Logger.log('5. もう一度「月を選んで照合」→ 2611 → 手で書いた欄（対応・回答・メモ）が、消えていないことを確認する');
+  Logger.log('6. 「Slack下書きを作成」を、もう一度 → 下書きが上書きされる（直した文面は、元に戻る）');
+  Logger.log('7. Slack下書きシートで行を選び、「選択した下書きをSlackに投稿」→ Webhook がなければ、投稿せずに、コピーを促す表示');
+  Logger.log('8. 記録シートの TEST-S7- の行を1つ消して、もう一度「月を選んで照合」→ その不一致が「（解消）」になり、対応が「完了」になる');
+  Logger.log('9. removeStage7TestData を実行して、テストで出た行（テストの児童・日付だけ）と、テスト記録を消す');
+  var plan = stage7TestPlan_();
+  plan.forEach(function (p, i) {
+    Logger.log('  テスト記録' + (i + 1) + '：児童ID ' + p[0].id + ' / 担任 ' + (p[0].homeroom || NO_HOMEROOM) + ' / ' + RECONCILE_TEST_MONTH + '月' + p[1] + '日 登校' + p[2] + (p[3] ? ' 下校' + p[3] : '（下校なし）'));
+  });
+}
+
+function insertStage7TestData() {
+  var sheet = getSheet_(SHEET_LOG);
+  var existing = sheet.getLastRow() < 2 ? [] : sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
+  if (existing.some(function (r) { return String(r[0]).indexOf('TEST-S7-') === 0; })) {
+    throw new Error('すでにテスト記録が入っています。先に removeStage7TestData を実行してください。');
+  }
+  var received = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm:ss');
+  var rows = [];
+  stage7TestPlan_().forEach(function (p, i) {
+    var c = p[0];
+    var group = c.grade <= 2 ? '12' : c.grade <= 4 ? '34' : '56';
+    [['登校', p[2]], ['下校', p[3]]].forEach(function (x) {
+      if (!x[1]) return;
+      var t = x[1].split(':');
+      rows.push(['TEST-S7-' + (i + 1) + '-' + x[0], c.id, c.name, c.grade, x[0],
+        reconcileTestDate_(p[1]) + ' ' + ('0' + t[0]).slice(-2) + ':' + t[1] + ':00', received, '（テスト）', group, false]);
+    });
+  });
+  var start = sheet.getLastRow() + 1;
+  sheet.getRange(start, 1, rows.length, 2).setNumberFormat('@');
+  sheet.getRange(start, 6, rows.length, 2).setNumberFormat('@');
+  sheet.getRange(start, 1, rows.length, LOG_HEADERS.length).setValues(rows);
+  Logger.log('テスト記録を ' + rows.length + '行、入れました。次はメニュー「照合」→「月を選んで照合」→ ' + RECONCILE_TEST_YYMM + ' を実行してください。');
+}
+
+/** テスト記録と、テストの児童・日付の照合結果の行、それだけを含む下書きを消す（11月に、本物の照合結果があっても消さない）。 */
+function removeStage7TestData() {
+  var ss = getAppSpreadsheet_();
+  var prefixes = stage7TestPlan_().map(function (p) {
+    var d = reconcileTestDate_(p[1]).replace(/-/g, '/');
+    return RECONCILE_TEST_YYMM + '|' + d + '|' + p[0].id + '|';
+  });
+  var isTestKey = function (k) { return prefixes.some(function (x) { return String(k).indexOf(x) === 0; }); };
+
+  var removed = { results: 0, drafts: 0, records: 0 };
+  var result = ss.getSheetByName(SHEET_RESULT);
+  var testKeys = {};
+  if (result && result.getLastRow() >= 2) {
+    var keys = result.getRange(1, 1, result.getLastRow(), 1).getValues();
+    for (var i = keys.length - 1; i >= 1; i--) {
+      if (isTestKey(keys[i][0])) { testKeys[String(keys[i][0])] = true; result.deleteRow(i + 1); removed.results++; }
+    }
+  }
+  var draft = ss.getSheetByName(SHEET_DRAFT);
+  if (draft && draft.getLastRow() >= 2) {
+    var rows = draft.getRange(1, 1, draft.getLastRow(), 8).getValues();
+    for (var j = rows.length - 1; j >= 1; j--) {
+      var ks = String(rows[j][DRAFT_COL.keys]).split(',').filter(Boolean);
+      if (String(rows[j][DRAFT_COL.month]) === RECONCILE_TEST_YYMM && ks.length && ks.every(isTestKey)) { draft.deleteRow(j + 1); removed.drafts++; }
+    }
+  }
+  var log = getSheet_(SHEET_LOG);
+  if (log.getLastRow() >= 2) {
+    var ids = log.getRange(1, 1, log.getLastRow(), 1).getValues();
+    for (var k = ids.length - 1; k >= 1; k--) {
+      if (String(ids[k][0]).indexOf('TEST-S7-') === 0) { log.deleteRow(k + 1); removed.records++; }
+    }
+  }
+  Logger.log('削除：テスト記録 ' + removed.records + '行、照合結果 ' + removed.results + '行、Slack下書き ' + removed.drafts + '行。');
+}
