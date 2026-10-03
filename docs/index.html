@@ -77,9 +77,21 @@ button { font-family: inherit; cursor: pointer; }
 .avatar { width: calc(clamp(52px, min(10vh, 11vw), 92px) * var(--k)); height: calc(clamp(52px, min(10vh, 11vw), 92px) * var(--k)); border-radius: 50%; overflow: hidden; background: #fff; display: grid; place-items: center; font-size: calc(clamp(26px, min(5vh, 5.5vw), 46px) * var(--k)); font-weight: 800; color: var(--accent); flex: none; }
 .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .s-done .avatar { opacity: .45; }
-.tile-label { font-size: max(12px, calc(clamp(14px, min(2.1vh, 2vw), 19px) * var(--k))); font-weight: 800; }
+.tile-label { font-size: max(14px, calc(clamp(16px, min(2.6vh, 2.4vw), 22px) * var(--k))); font-weight: 800; }
 .s-present .tile-label { color: #1d7a37; }
 .s-done .tile-label { color: #4a5875; }
+/* ふりがな（1・2年のグループ）。場所ごとに大きさを調整する */
+ruby { ruby-position: over; }
+rt { font-weight: 700; }
+.tile-label rt { font-size: max(9px, .52em); }
+.grade-label rt, .home-group rt { font-size: .5em; }
+.chip rt { font-size: .6em; }
+.btn-back rt { font-size: .4em; }
+.btn-shoot rt { font-size: .32em; letter-spacing: .1em; }
+.cap-msg rt { font-size: .4em; }
+.cap-msg small rt { font-size: .55em; }
+.cap-done rt { font-size: .35em; }
+.empty-note rt { font-size: .45em; }
 .empty-note { padding: 48px 24px; font-size: 24px; font-weight: 700; color: var(--ink-soft); text-align: center; line-height: 1.7; }
 .home-foot { position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 16px calc(8px + env(safe-area-inset-bottom)); display: flex; gap: 10px; pointer-events: none; }
 .chip { pointer-events: none; font-size: 15px; font-weight: 800; padding: 4px 12px; border-radius: 999px; background: rgba(0,0,0,.55); color: #fff; }
@@ -167,7 +179,7 @@ button { font-family: inherit; cursor: pointer; }
     <div class="groups" id="groups"></div>
     <div class="home-foot">
       <span class="chip" id="chip-unsent" hidden></span>
-      <span class="chip warn" id="chip-net" hidden>つながっていません</span>
+      <span class="chip warn" id="chip-net" hidden></span>
       <span class="ver" id="ver"></span>
     </div>
   </section>
@@ -175,7 +187,7 @@ button { font-family: inherit; cursor: pointer; }
   <!-- 画面2：撮影 -->
   <section id="screen-capture" class="screen">
     <div class="cap-top">
-      <button class="btn-back" id="btn-back" type="button">◀ もどる</button>
+      <button class="btn-back" id="btn-back" type="button">◀ 戻る</button>
       <div class="cap-name" id="cap-name"></div>
     </div>
     <div class="cap-body">
@@ -184,7 +196,7 @@ button { font-family: inherit; cursor: pointer; }
         <div class="cap-msg" id="cap-msg"></div>
       </div>
       <div class="cap-side">
-        <button class="btn-shoot go" id="btn-shoot" type="button" disabled>とうこう</button>
+        <button class="btn-shoot go" id="btn-shoot" type="button" disabled>登校</button>
       </div>
     </div>
     <div class="cap-done" id="cap-done">
@@ -197,7 +209,7 @@ button { font-family: inherit; cursor: pointer; }
   <!-- 画面3：設定（スタッフ用） -->
   <section id="screen-settings" class="screen">
     <div class="set-wrap">
-      <h1>せってい（スタッフ用）</h1>
+      <h1>設定（スタッフ用）</h1>
 
       <div class="card">
         <label class="lbl">学年グループ</label>
@@ -241,7 +253,7 @@ button { font-family: inherit; cursor: pointer; }
   <!-- 暗証番号の入力 -->
   <div class="modal" id="pin-modal" hidden>
     <div class="modal-card">
-      <h2>あんしょうばんごう</h2>
+      <h2>暗証番号</h2>
       <input id="pin-input" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off">
       <div class="err" id="pin-err" role="alert"></div>
       <div class="row">
@@ -256,33 +268,40 @@ button { font-family: inherit; cursor: pointer; }
 (() => {
 'use strict';
 
-const APP_VERSION = 'v2';
+const APP_VERSION = 'v3';
 const TZ = 'Asia/Tokyo';
 const GROUP_LABEL = { '12': '1・2年', '34': '3・4年', '56': '5・6年' };
-// 子ども向けの文言。1・2年はひらがな、3年生以上は漢字（グループで切り替える）
-const TX = {
-  kana: {
-    group: '1・2ねん', grade: (n) => n + 'ねんせい',
-    inBtn: 'とうこう', outBtn: 'げこう', inLabel: 'とうこう', doneLabel: 'げこうずみ',
-    alreadyOut: 'もう げこうしているよ',
-    inDone: 'とうこう できたよ！', outDone: 'げこう できたよ！',
-    inSub: 'きょうも いちにち がんばろう', outSub: 'きをつけて かえってね',
-    back: '◀ もどる', camPrep: 'カメラを じゅんびしています…',
-    camErr: 'カメラが つかえません', camDenied: 'せんせいに きいてね（カメラの きょかが ひつようです）', camOther: 'せんせいに きいてね',
-    loading: 'なまえを よみこんでいます…\nでてこないときは せんせいに おしえてね', setup: 'せんせいが せっていを してね',
-  },
-  kanji: {
-    group: null, grade: (n) => n + '年生',
-    inBtn: '登校', outBtn: '下校', inLabel: '登校', doneLabel: '下校済み',
-    alreadyOut: 'もう下校しているよ',
-    inDone: '登校できたよ！', outDone: '下校できたよ！',
-    inSub: '今日も一日がんばろう', outSub: '気をつけて帰ってね',
-    back: '◀ 戻る', camPrep: 'カメラを準備しています…',
-    camErr: 'カメラが使えません', camDenied: '先生に聞いてね（カメラの許可が必要です）', camOther: '先生に聞いてね',
-    loading: '名前を読み込んでいます…\n出てこないときは先生に教えてね', setup: '先生が設定をしてね',
-  },
+// 子ども向けの文言。全学年で漢字にして、1・2年のグループだけ漢字の上にふりがなを付ける。
+// 書き方：{漢字|よみ}（よみは、1・2年のときだけルビとして表示する）
+const M = {
+  group: { '12': '1・2{年|ねん}', '34': '3・4{年|ねん}', '56': '5・6{年|ねん}' },
+  grade: (n) => n + '{年生|ねんせい}',
+  inBtn: '{登校|とうこう}', outBtn: '{下校|げこう}',
+  inLabel: '{登校|とうこう}', doneLabel: '{下校|げこう}{済|ず}み',
+  alreadyOut: 'もう{下校|げこう}しているよ',
+  inDone: '{登校|とうこう}できたよ！', outDone: '{下校|げこう}できたよ！',
+  inSub: '{今日|きょう}も{一日|いちにち}がんばろう', outSub: '{気|き}をつけて{帰|かえ}ってね',
+  back: '◀ {戻|もど}る', camPrep: 'カメラを{準備|じゅんび}しています…',
+  camErr: 'カメラが{使|つか}えません',
+  camDenied: '{先生|せんせい}に{聞|き}いてね（カメラの{許可|きょか}が{必要|ひつよう}です）', camOther: '{先生|せんせい}に{聞|き}いてね',
+  loading: '{名前|なまえ}を{読|よ}み{込|こ}んでいます…\n{出|で}てこないときは{先生|せんせい}に{教|おし}えてね',
+  setup: '{先生|せんせい}が{設定|せってい}をしてね',
+  unsent: (n) => `{未送信|みそうしん} ${n}{件|けん}`, offline: '{接続|せつぞく}できません',
 };
-const T = () => (cfg.group === '12' ? TX.kana : TX.kanji);
+const isKana = () => cfg.group === '12';
+// {漢字|よみ} を DOM にする。1・2年のグループではルビ付き、それ以外は漢字だけ（innerHTML は使わない）
+function rich(markup) {
+  const frag = document.createDocumentFragment();
+  const re = /\{([^|}]+)\|([^}]+)\}/g;
+  let last = 0, m;
+  while ((m = re.exec(markup))) {
+    if (m.index > last) frag.append(markup.slice(last, m.index));
+    frag.append(isKana() ? rubyOf(m[1], m[2]) : document.createTextNode(m[1]));
+    last = re.lastIndex;
+  }
+  if (last < markup.length) frag.append(markup.slice(last));
+  return frag;
+}
 const TODAY_REFRESH_MS = 3 * 60 * 1000;
 const ROSTER_REFRESH_MS = 30 * 60 * 1000;
 const FLUSH_MS = 60 * 1000;
@@ -413,6 +432,7 @@ function apiPost(rec, resent) {
 function setNet(ok) {
   lastNetOk = ok;
   $('#chip-net').hidden = ok;
+  if (!ok) $('#chip-net').replaceChildren(rich(M.offline));
 }
 
 /* ───────── 児童の状態 ───────── */
@@ -465,12 +485,12 @@ function nameNode(c) {
 function renderHome() {
   const wrap = $('#groups');
   wrap.replaceChildren();
-  $('#home-group').textContent = T().group || GROUP_LABEL[cfg.group] || '';
+  $('#home-group').replaceChildren(rich(M.group[cfg.group] || ''));
   const list = roster();
   if (!list.length) {
     const d = document.createElement('div');
     d.className = 'empty-note';
-    d.textContent = configured() ? T().loading : T().setup;
+    d.append(rich(configured() ? M.loading : M.setup));
     d.style.whiteSpace = 'pre-line';
     wrap.append(d);
   }
@@ -482,7 +502,7 @@ function renderHome() {
       sec.className = 'grade';
       const label = document.createElement('div');
       label.className = 'grade-label';
-      label.textContent = T().grade(grade);
+      label.append(rich(M.grade(grade)));
       box = document.createElement('div');
       box.className = 'tiles';
       sec.append(label, box);
@@ -512,7 +532,8 @@ function renderHome() {
     if (st.status !== 'before') {
       const lb = document.createElement('div');
       lb.className = 'tile-label';
-      lb.textContent = st.status === 'present' ? T().inLabel + ' ' + hhmm(st.arrived) : T().doneLabel;
+      if (st.status === 'present') lb.append(rich(M.inLabel), ' ' + hhmm(st.arrived));
+      else lb.append(rich(M.doneLabel));
       tile.append(lb);
     }
     tile.addEventListener('click', () => openCapture(c));
@@ -534,7 +555,7 @@ function fitTiles() {
 function renderBadge() {
   const chip = $('#chip-unsent');
   chip.hidden = queue.length === 0;
-  chip.textContent = '未送信 ' + queue.length + '件';
+  chip.replaceChildren(rich(M.unsent(queue.length)));
 }
 function tickClock() {
   const now = Date.now();
@@ -645,14 +666,14 @@ async function flushQueue() {
 const video = $('#cap-video');
 const cap = { child: null, stream: null, session: 0, busy: false, idle: null, doneTimer: null };
 
-function setCapMsg(html, sub) {
+function setCapMsg(markup, sub) {
   const m = $('#cap-msg');
   m.replaceChildren();
-  if (html) {
-    m.append(document.createTextNode(html));
-    if (sub) { const s = document.createElement('small'); s.textContent = sub; m.append(s); }
+  if (markup) {
+    m.append(rich(markup));
+    if (sub) { const s = document.createElement('small'); s.append(rich(sub)); m.append(s); }
   }
-  m.hidden = !html;
+  m.hidden = !markup;
 }
 function bumpIdle() {
   clearTimeout(cap.idle);
@@ -676,23 +697,23 @@ async function openCapture(child) {
   cap.child = child; cap.busy = false;
   const nm = $('#cap-name');
   nm.replaceChildren(nameNode(child));
-  $('#btn-back').textContent = T().back;
+  $('#btn-back').replaceChildren(rich(M.back));
   const btn = $('#btn-shoot');
   show('capture');
   bumpIdle();
   if (st.status === 'done') {
     btn.hidden = true;
     video.hidden = true;
-    setCapMsg(T().alreadyOut);
+    setCapMsg(M.alreadyOut);
     return;
   }
   video.hidden = false;
   btn.hidden = false;
   btn.disabled = true;
   const isIn = st.status === 'before';
-  btn.textContent = isIn ? T().inBtn : T().outBtn;
+  btn.replaceChildren(rich(isIn ? M.inBtn : M.outBtn));
   btn.className = 'btn-shoot ' + (isIn ? 'go' : 'out');
-  setCapMsg(T().camPrep);
+  setCapMsg(M.camPrep);
   const my = ++cap.session;
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 960 }, height: { ideal: 720 } }, audio: false });
@@ -705,7 +726,7 @@ async function openCapture(child) {
   } catch (e) {
     if (my !== cap.session) return;
     const denied = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
-    setCapMsg(T().camErr, denied ? T().camDenied : T().camOther);
+    setCapMsg(M.camErr, denied ? M.camDenied : M.camOther);
   }
 }
 async function shoot() {
@@ -740,8 +761,8 @@ async function shoot() {
   const av = $('#done-avatar');
   av.replaceChildren();
   const img = document.createElement('img'); img.src = dataUrl; img.alt = ''; av.append(img);
-  $('#done-big').textContent = isIn ? T().inDone : T().outDone;
-  $('#done-sub').textContent = isIn ? T().inSub : T().outSub;
+  $('#done-big').replaceChildren(rich(isIn ? M.inDone : M.outDone));
+  $('#done-sub').replaceChildren(rich(isIn ? M.inSub : M.outSub));
   renderBadge();
   cap.doneTimer = setTimeout(backHome, DONE_MS);
   flushQueue();                              // 送信はあと（失敗してもキューに残る）
@@ -774,7 +795,7 @@ function openPinModal() {
 async function submitPin() {
   const err = $('#pin-err');
   const wait = pinLockUntil - Date.now();
-  if (wait > 0) { err.textContent = Math.ceil(wait / 1000) + '秒 まってね'; return; }
+  if (wait > 0) { err.textContent = Math.ceil(wait / 1000) + '秒待ってください'; return; }
   const pin = $('#pin-input').value.trim();
   let ok = false;
   try { ok = (await hashPin(pin, cfg.pinSalt)) === cfg.pinHash; } catch (e) { err.textContent = '暗証番号を確認できません'; return; }
@@ -785,8 +806,8 @@ async function submitPin() {
   } else {
     pinFails++;
     $('#pin-input').value = '';
-    if (pinFails >= 5) { pinLockUntil = Date.now() + 30000; pinFails = 0; err.textContent = 'まちがいが おおいので 30秒 まってね'; }
-    else err.textContent = 'ちがいます';
+    if (pinFails >= 5) { pinLockUntil = Date.now() + 30000; pinFails = 0; err.textContent = '間違いが多いので、30秒待ってください'; }
+    else err.textContent = '違います';
   }
 }
 

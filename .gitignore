@@ -1,5 +1,6 @@
 # clasp（scriptIdを含むためコミットしない）
 .clasp.json
+.clasp*.json
 .clasprc.json
 
 # 認証情報・設定値（URL・合言葉・各種IDはコミットしない）
@@ -20,3 +21,6 @@ node_modules/
 # 一時ファイル
 *.log
 *.tmp
+
+# 確認用のテスト写真（コミットしない）
+tools/*.jpg

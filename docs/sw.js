@@ -3,7 +3,7 @@
  * 更新するときは CACHE のバージョン番号を上げる（古いキャッシュは activate で削除される）。
  * GAS など別オリジンへのリクエストは一切さわらない（キャッシュしない）。
  */
-const CACHE = 'tokogeko-v2';
+const CACHE = 'tokogeko-v3';
 const PAGE = './index.html';
 const ASSETS = [
   './',
