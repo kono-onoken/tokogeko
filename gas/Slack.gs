@@ -46,12 +46,13 @@ function buildDrafts_(rows, homeroomIds, yymm) {
         : String(a[RC.id]) < String(b[RC.id]) ? -1 : String(a[RC.id]) > String(b[RC.id]) ? 1 : 0;
     });
     var memberId = (homeroomIds[teacher] || '').trim();
-    var mention = memberId ? '<@' + memberId + '>' : (teacher === NO_HOMEROOM ? '【担任未設定】' : teacher + '先生');
+    var mention = memberId ? '<@' + memberId + '>' : (teacher === NO_HOMEROOM ? NO_HOMEROOM : teacher + '先生');
     var lines = list.map(function (r) {
       var desc = String(r[RC.desc]).replace(RESOLVED_PREFIX, '');
       return '・' + monthDayLabel_(r[RC.date]) + '(' + r[RC.weekday] + ') ' + r[RC.name] + 'さん：' + desc;
     });
-    var text = mention + ' ' + month + '月の登下校の照合で、確認したい記録が' + list.length + '件あります。\n' +
+    // 1行目：宛先（メンション）／2行目：見出し／3行目：依頼／記録の行／結び
+    var text = mention + '\n【' + month + '月の登下校の確認依頼】\n下記の登下校記録について、確認してください。\n' +
       lines.join('\n') + '\nこのスレッドで、正しい記録を教えてください。';
     return { teacher: teacher, memberId: memberId, count: list.length, text: text, keys: list.map(function (r) { return String(r[RC.key]); }) };
   });

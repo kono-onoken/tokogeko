@@ -195,11 +195,12 @@ test('担任ごとにまとまり、文面は仕様の形（メンション・�
   const d = w.json(`buildDrafts_(${JSON.stringify(rows)}, { 小野: 'U0AAAA111', 田中: '' }, '2611')`);
   assert.strictEqual(d.length, 2);
   assert.deepStrictEqual(d.map((x) => [x.teacher, x.count]), [['小野', 2], ['田中', 1]]);
-  assert.strictEqual(d[0].text, '<@U0AAAA111> 11月の登下校の照合で、確認したい記録が2件あります。\n' +
+  assert.strictEqual(d[0].text, '<@U0AAAA111>\n【11月の登下校の確認依頼】\n下記の登下校記録について、確認してください。\n' +
     '・11/5(木) 佐藤 花さん：出席簿は▼14:00、アプリでは15:50に下校\n' +
     '・11/12(木) 山田 太郎さん：アプリでは9:20に登校、出席簿は○（出席）\n' +
     'このスレッドで、正しい記録を教えてください。'); // 日付順
-  assert.ok(d[1].text.startsWith('田中先生 11月の')); // メンバーIDがない担任は、メンションの代わりに担任名
+  assert.ok(d[1].text.startsWith('田中先生\n【11月の登下校の確認依頼】')); // メンバーIDがない担任は、メンションの代わりに担任名
+  assert.ok(!d[0].text.includes('件あります')); // 件数の文は入れない
 });
 test('対象外の行（対応が違う・送信済み・別の月・担任なし以外）は入らない', () => {
   const w = world();
@@ -208,7 +209,7 @@ test('対象外の行（対応が違う・送信済み・別の月・担任な�
   rows.push(require_(mm('6', '2026/10/02', 1, { key: '2610|2026/10/02|6|①' })).concat(['担任に確認', '', '', '']));
   const d = w.json(`buildDrafts_(${JSON.stringify(rows)}, { 小野: 'U0AAAA111' }, '2611')`);
   assert.deepStrictEqual(d.map((x) => [x.teacher, x.count]), [['小野', 1], ['（担任未設定）', 1]]);
-  assert.ok(d[1].text.startsWith('【担任未設定】'));
+  assert.ok(d[1].text.startsWith('（担任未設定）\n【11月の登下校の確認依頼】'));
 });
 test('文面に、写真・写真URLを入れない（名前・日付・時刻・記号だけ）', () => {
   const w = world();
