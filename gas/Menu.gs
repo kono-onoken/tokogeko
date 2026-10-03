@@ -26,6 +26,11 @@ function alert_(title, message) {
   }
 }
 
+/** 画面の下に、短いメッセージを出す（画面がないときは、何もしない）。 */
+function toast_(message) {
+  try { SpreadsheetApp.getActiveSpreadsheet().toast(message, '照合', 5); } catch (e) { /* 画面がないときは何もしない */ }
+}
+
 /** はい・いいえの確認。エディタから実行したときは、いいえ（false）にする（勝手に投稿しない）。 */
 function confirm_(title, message) {
   try {
@@ -137,14 +142,14 @@ function menuPostSelectedDrafts() {
     return;
   }
   var summary = sel.items.map(function (it) { return it.teacher + '：' + it.count + '件'; }).join('\n');
-  if (!confirm_('Slackに投稿しますか？', '次の ' + sel.items.length + '人宛てに、Slack に投稿します。\n\n' + summary + '\n\n投稿すると、取り消せません。')) return;
+  if (!confirm_('Slackに投稿しますか？', '次の ' + sel.items.length + '人宛てに、Slack に投稿します。\n\n' + summary + '\n\n投稿すると、取り消せません。')) { toast_('投稿を取りやめました（Slack には、何も送っていません）'); return; }
 
   var results = postDrafts_(sel.items, webhook);
   var nowStr = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm:ss');
   markDraftsSent_(sheet, results, nowStr);
   var ok = results.filter(function (r) { return r.ok; });
   var ng = results.filter(function (r) { return !r.ok; });
-  var msg = ok.length + '件を投稿しました。';
+  var msg = ok.length + '件を投稿しました。' + (ok.length ? '\nSlack の、Webhook を作るときに選んだチャンネルを、確認してください。' : '');
   if (ng.length) {
     msg += '\n\n【投稿できませんでした】\n' + ng.map(function (r) { return r.teacher + '（' + r.error + '）'; }).join('\n') + '\n状態は「' + DRAFT_STATE_DRAFT + '」のままです。';
     var hints = [];

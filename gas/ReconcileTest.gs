@@ -341,3 +341,21 @@ function removeStage7TestData() {
   }
   Logger.log('削除：テスト記録 ' + removed.records + '行、照合結果 ' + removed.results + '行、Slack下書き ' + removed.drafts + '行。');
 }
+
+// ───────────────────────── Slack の接続テスト（手動実行） ─────────────────────────
+
+/**
+ * 下書きとは関係なく、短いテストメッセージを、Webhook に1通だけ送る。結果をログに出す（URL は出さない）。
+ * 送った先は、Webhook を作るときに選んだチャンネル。
+ */
+function testSlackWebhook() {
+  var webhook = cleanWebhookUrl_(PropertiesService.getScriptProperties().getProperty('SLACK_WEBHOOK_URL'));
+  if (!webhook) { Logger.log('SLACK_WEBHOOK_URL が、設定されていません。'); return; }
+  if (!isSlackWebhookUrl_(webhook)) {
+    Logger.log('SLACK_WEBHOOK_URL が、Incoming Webhook の URL の形ではありません（入っている値のドメイン：' + urlHostOnly_(webhook) + '）。https://hooks.slack.com/services/… の形にしてください。');
+    return;
+  }
+  var r = postToSlack_(webhook, '【接続テスト】とうげこう照合から、Slack への接続を確認しています。このメッセージは、無視してください。');
+  if (r.ok) Logger.log('Slack に送信しました（HTTP ' + r.code + '）。Webhook を作るときに選んだチャンネルに、メッセージが出ているか確認してください。');
+  else Logger.log('送信できませんでした：' + r.error + ' ' + slackErrorHint_(r.code, r.reason));
+}

@@ -284,6 +284,14 @@ test('投稿：セルで直した文面が、そのまま投稿され、状態�
   assert.ok(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(row[6]));
   assert.strictEqual(w.sheets['照合結果'].rows[1][19], row[6]);
 });
+test('投稿に成功したら、チャンネルを確認するよう案内する', () => {
+  const w = world();
+  withDraft(w, '文面');
+  w.sheets['Slack下書き'].setActiveSelection([[2, 1]]);
+  w.ctx.menuPostSelectedDrafts();
+  const msg = w.alerts[w.alerts.length - 1].msg;
+  assert.ok(msg.includes('1件を投稿しました') && msg.includes('チャンネル'));
+});
 test('「送信済み」の行は、選択しても投稿しない', () => {
   const w = world();
   withDraft(w, '文面');
