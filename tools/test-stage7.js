@@ -39,7 +39,7 @@ function fmt(date, tz, pattern) {
   return pattern.replace('yyyy', p.year).replace('MM', p.month).replace('dd', p.day).replace('HH', p.hour).replace('mm', p.minute).replace('ss', p.second);
 }
 
-function world({ webhook = 'https://hooks.slack.test/services/SECRET', confirmOk = true, fetchCode = 200, fetchThrows = false } = {}) {
+function world({ webhook = 'https://hooks.slack.test/services/SECRET', confirmOk = true, fetchCode = 200, fetchThrows = false, fetchBody = 'ok' } = {}) {
   const props = { APP_SHEET_ID: 'x', FOLDER_ID: 'f', API_TOKEN: 't' };
   if (webhook) props.SLACK_WEBHOOK_URL = webhook;
   const HEAD_RESULT = ['キー', '対象月', '日付', '曜日', '児童ID', '名前', '学年', '担任', '行事メモ', 'アプリ登校', 'アプリ下校', '本来の記号', '出席簿の記号', '出席簿の時刻', '不一致の種類', '説明', '対応', '担任の回答', 'メモ', 'Slack送信日時'];
@@ -60,7 +60,7 @@ function world({ webhook = 'https://hooks.slack.test/services/SECRET', confirmOk
       fetch(url, opt) {
         fetches.push({ url, payload: JSON.parse(opt.payload) });
         if (fetchThrows) throw new Error('Exception: could not reach ' + url);
-        return { getResponseCode: () => fetchCode };
+        return { getResponseCode: () => fetchCode, getContentText: () => fetchBody };
       },
     },
     SpreadsheetApp: {
@@ -307,6 +307,33 @@ test('投稿に失敗したら、状態は「下書き」のまま。Webhook の
   assert.strictEqual(w.sheets['Slack下書き'].rows[1][5], '下書き');
   assert.ok(w.alerts.some((a) => /投稿できませんでした/.test(a.msg)));
   assert.ok(!w.alerts.some((a) => a.msg.includes('hooks.slack.test') || a.msg.includes('SECRET')));
+});
+test('403のとき、Slackが返した理由（invalid_token など）をメッセージに出し、原因のヒントも出す。URLは出さない', () => {
+  const w = world({ fetchCode: 403, fetchBody: 'invalid_token' });
+  withDraft(w, '文面');
+  w.sheets['Slack下書き'].setActiveSelection([[2, 1]]);
+  w.ctx.menuPostSelectedDrafts();
+  const msg = w.alerts[w.alerts.length - 1].msg;
+  assert.ok(msg.includes('HTTP 403') && msg.includes('invalid_token'));
+  assert.ok(msg.includes('考えられる原因') && msg.includes('URL が正しくない'));
+  assert.ok(!msg.includes('hooks.slack.test') && !msg.includes('SECRET'));
+  assert.strictEqual(w.sheets['Slack下書き'].rows[1][5], '下書き');
+});
+test('理由に応じたヒント：action_prohibited／no_service／本文なしの403', () => {
+  const w = world();
+  assert.ok(w.run(`slackErrorHint_(403, 'action_prohibited')`).includes('禁止'));
+  assert.ok(w.run(`slackErrorHint_(404, 'no_service')`).includes('無効'));
+  assert.ok(w.run(`slackErrorHint_(403, '')`).includes('URL'));
+  assert.strictEqual(w.run(`slackErrorHint_(500, 'x')`), '');
+});
+test('Slackの返事の本文にURLが入っていても、理由の欄には出ない', () => {
+  const w = world({ fetchCode: 403, fetchBody: 'bad https://hooks.slack.test/services/SECRET' });
+  const r = w.json(`postToSlack_('https://hooks.slack.test/services/SECRET', 'x')`);
+  assert.ok(!r.error.includes('SECRET') && !r.reason.includes('SECRET'));
+});
+test('Webhook の URL に、空白・改行・引用符が混ざっていても取り除く', () => {
+  const w = world();
+  assert.strictEqual(w.run('cleanWebhookUrl_("  \\"https://hooks.slack.test/services/AB\\nCD\\"  ")'), 'https://hooks.slack.test/services/ABCD');
 });
 test('通信エラーの文にURLが入っていても、結果には出ない', () => {
   const w = world({ fetchThrows: true });

@@ -102,10 +102,31 @@ function postToSlack_(webhookUrl, text) {
       method: 'post', contentType: 'application/json', payload: JSON.stringify({ text: text }), muteHttpExceptions: true
     });
     var code = resp.getResponseCode();
-    return { ok: code >= 200 && code < 300, code: code, error: code >= 200 && code < 300 ? '' : 'HTTP ' + code };
+    if (code >= 200 && code < 300) return { ok: true, code: code, error: '', reason: '' };
+    // Slack が返す理由は、短い単語（invalid_token など）。URL が含まれていても、伏せる
+    var reason = '';
+    try { reason = String(resp.getContentText()).split(webhookUrl).join('[URL]').replace(/\s+/g, ' ').trim().slice(0, 40); } catch (e) { /* 本文を読めなくても続ける */ }
+    return { ok: false, code: code, error: 'HTTP ' + code + (reason ? '：' + reason : ''), reason: reason };
   } catch (e) {
-    return { ok: false, code: 0, error: String(e && e.message).split(webhookUrl).join('[URL]') };
+    return { ok: false, code: 0, error: String(e && e.message).split(webhookUrl).join('[URL]'), reason: '' };
   }
+}
+
+/** Slack の返事から、考えられる原因と、確認することを、1文で返す（URL は含めない）。 */
+function slackErrorHint_(code, reason) {
+  var r = String(reason || '');
+  if (/invalid_token/.test(r) || (code === 403 && !r)) return 'Webhook の URL が正しくない可能性があります（コピー漏れ・末尾の欠け・余分な文字）。URL を、Slack の画面から、コピーし直してください。';
+  if (/action_prohibited/.test(r)) return 'Slack の設定で、この投稿が禁止されています。ワークスペースの管理者の設定や、チャンネルの投稿権限を確認してください。';
+  if (/no_service|404/.test(r + code) || code === 404) return 'この Webhook は、無効か、削除されています。Slack で、作り直してください。';
+  if (/channel_is_archived|410/.test(r + code) || code === 410) return '投稿先のチャンネルが、アーカイブされています。';
+  if (/channel_not_found/.test(r)) return '投稿先のチャンネルが、見つかりません。';
+  if (code === 429) return '短時間に送りすぎました。少し待ってから、もう一度実行してください。';
+  return '';
+}
+
+/** スクリプトプロパティの Webhook URL から、混ざった空白・改行・引用符を取り除く。 */
+function cleanWebhookUrl_(raw) {
+  return String(raw || '').replace(/\s/g, '').replace(/^["'「]+|["'」]+$/g, '');
 }
 
 /**
@@ -118,7 +139,7 @@ function postDrafts_(items, webhookUrl) {
   items.forEach(function (it, i) {
     if (i > 0) Utilities.sleep(1000); // 続けて送りすぎない
     var r = postToSlack_(webhookUrl, it.text);
-    results.push({ row: it.row, teacher: it.teacher, keys: it.keys, ok: r.ok, error: r.error });
+    results.push({ row: it.row, teacher: it.teacher, keys: it.keys, ok: r.ok, error: r.error, code: r.code, reason: r.reason });
   });
   return results;
 }

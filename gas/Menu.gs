@@ -126,7 +126,7 @@ function menuPostSelectedDrafts() {
     alert_('Slackに投稿', '投稿できる行が選択されていません。状態が「' + DRAFT_STATE_DRAFT + '」の行を選んでください' + (sel.skipped ? '（「送信済み」の行は、投稿しません）。' : '。'));
     return;
   }
-  var webhook = PropertiesService.getScriptProperties().getProperty('SLACK_WEBHOOK_URL');
+  var webhook = cleanWebhookUrl_(PropertiesService.getScriptProperties().getProperty('SLACK_WEBHOOK_URL'));
   if (!webhook) {
     alert_('Slackに投稿', 'Slack の投稿先（Webhook）が、設定されていません。投稿はしませんでした。\n\n下書きのセルをコピーして、Slack に貼り付けてください。\n貼り付けたあと、状態を「' + DRAFT_STATE_SENT + '」に、手で変えてください。');
     return;
@@ -140,6 +140,11 @@ function menuPostSelectedDrafts() {
   var ok = results.filter(function (r) { return r.ok; });
   var ng = results.filter(function (r) { return !r.ok; });
   var msg = ok.length + '件を投稿しました。';
-  if (ng.length) msg += '\n\n【投稿できませんでした】\n' + ng.map(function (r) { return r.teacher + '（' + r.error + '）'; }).join('\n') + '\n状態は「' + DRAFT_STATE_DRAFT + '」のままです。';
+  if (ng.length) {
+    msg += '\n\n【投稿できませんでした】\n' + ng.map(function (r) { return r.teacher + '（' + r.error + '）'; }).join('\n') + '\n状態は「' + DRAFT_STATE_DRAFT + '」のままです。';
+    var hints = [];
+    ng.forEach(function (r) { var h = slackErrorHint_(r.code, r.reason); if (h && hints.indexOf(h) < 0) hints.push(h); });
+    if (hints.length) msg += '\n\n【考えられる原因】\n' + hints.join('\n');
+  }
   alert_('Slackに投稿', msg);
 }
